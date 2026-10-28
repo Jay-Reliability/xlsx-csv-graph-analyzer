@@ -1,0 +1,2309 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>엑셀/CSV 데이터 Graph Analyzer V1.0</title>
+    <!-- SheetJS for .xlsx file support -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+        }
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100vh;
+            background-color: #EEF2F6;
+            font-family: "Malgun Gothic", "Apple SD Gothic Neo", "NanumGothic", sans-serif;
+            font-size: 10pt;
+            color: #1F2933;
+            overflow: hidden;
+        }
+        /* Window Title Bar (Mimics PyQt5 Window Header) */
+        .app-window {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            height: 100vh;
+            background-color: #EEF2F6;
+        }
+        .window-titlebar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: linear-gradient(90deg, #1E293B 0%, #243B53 100%);
+            color: #FFFFFF;
+            padding: 6px 14px;
+            font-size: 10.5pt;
+            font-weight: bold;
+            border-bottom: 1px solid #B8C2CC;
+            flex-shrink: 0;
+        }
+        .window-titlebar .title-text {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .window-titlebar .status-badge {
+            font-size: 8.5pt;
+            font-weight: normal;
+            background-color: rgba(255, 255, 255, 0.15);
+            padding: 2px 8px;
+            border-radius: 4px;
+            color: #E2E8F0;
+        }
+
+        /* Main Layout (QSplitter Horizontal equivalent) */
+        .main-container {
+            display: flex;
+            flex: 1;
+            padding: 8px;
+            gap: 0;
+            min-height: 0;
+            overflow: hidden;
+        }
+
+        /* Left Control Panel */
+        .left-panel {
+            width: 360px;
+            min-width: 260px;
+            max-width: 600px;
+            display: flex;
+            flex-direction: column;
+            padding: 8px 10px;
+            gap: 9px;
+            background-color: #EEF2F6;
+            height: 100%;
+            overflow-y: auto;
+            flex-shrink: 0;
+        }
+
+        /* Splitter Handles */
+        .splitter-v {
+            width: 6px;
+            cursor: col-resize;
+            background-color: transparent;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        .splitter-v::after {
+            content: "";
+            width: 2px;
+            height: 40px;
+            background-color: #CBD5E1;
+            border-radius: 1px;
+        }
+        .splitter-v:hover::after {
+            background-color: #2F80ED;
+        }
+
+        .splitter-h {
+            height: 6px;
+            cursor: row-resize;
+            background-color: transparent;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        .splitter-h::after {
+            content: "";
+            height: 2px;
+            width: 40px;
+            background-color: #CBD5E1;
+            border-radius: 1px;
+        }
+        .splitter-h:hover::after {
+            background-color: #2F80ED;
+        }
+
+        /* Right Panel (QSplitter Vertical equivalent) */
+        .right-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            min-height: 0;
+            height: 100%;
+        }
+
+        .graph-panel {
+            flex: 65;
+            min-height: 260px;
+            display: flex;
+            flex-direction: column;
+            padding: 6px 8px 4px 8px;
+            gap: 8px;
+            overflow: hidden;
+        }
+
+        .analysis-panel {
+            flex: 35;
+            min-height: 140px;
+            display: flex;
+            flex-direction: column;
+            padding: 4px 8px 6px 8px;
+            overflow: hidden;
+        }
+
+        /* QGroupBox Style */
+        .group-box {
+            position: relative;
+            border: 1px solid #B8C2CC;
+            border-radius: 8px;
+            margin-top: 8px;
+            padding: 14px 8px 8px 8px;
+            background-color: #F8FAFC;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .group-box-title {
+            position: absolute;
+            top: -9px;
+            left: 10px;
+            background-color: #F8FAFC;
+            padding: 0 5px;
+            font-weight: bold;
+            color: #243B53;
+            font-size: 9.5pt;
+            line-height: 1;
+        }
+
+        /* Flex stretches matching PyQt stretch factors */
+        .grp-x {
+            flex: 1;
+            min-height: 85px;
+        }
+        .grp-y {
+            flex: 2;
+            min-height: 135px;
+        }
+        .grp-selected-y {
+            flex: 2;
+            min-height: 135px;
+        }
+
+        /* QPushButton Style */
+        .btn {
+            background-color: #2F80ED;
+            color: #FFFFFF;
+            border: none;
+            border-radius: 7px;
+            padding: 8px 12px;
+            font-family: inherit;
+            font-size: 10pt;
+            font-weight: bold;
+            cursor: pointer;
+            text-align: center;
+            transition: background-color 0.12s ease;
+            flex-shrink: 0;
+        }
+        .btn:hover {
+            background-color: #1C64D1;
+        }
+        .btn:active {
+            background-color: #164E9E;
+        }
+        .btn-danger {
+            background-color: #D92D20;
+            padding: 9px 11px;
+            font-weight: 700;
+        }
+        .btn-danger:hover {
+            background-color: #B42318;
+        }
+        .btn-danger:active {
+            background-color: #7A271A;
+        }
+
+        /* QLabel File Info */
+        .lbl-file {
+            color: #243B53;
+            font-size: 9.5pt;
+            word-break: break-all;
+            line-height: 1.35;
+            padding: 2px 2px;
+            flex-shrink: 0;
+        }
+
+        /* QListWidget Style */
+        .list-widget {
+            background-color: #FFFFFF;
+            border: 1px solid #BCCCDC;
+            border-radius: 6px;
+            padding: 4px;
+            overflow-y: auto;
+            flex: 1;
+            min-height: 50px;
+            outline: none;
+        }
+        .list-item {
+            padding: 4px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 9.5pt;
+            color: #1F2933;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .list-item:hover {
+            background-color: #EBF8FF;
+        }
+        .list-item.selected {
+            background-color: #BEE3F8;
+            color: #102A43;
+            font-weight: 600;
+        }
+
+        /* QLineEdit Style */
+        .line-edit {
+            background-color: #FFFFFF;
+            border: 1px solid #BCCCDC;
+            border-radius: 6px;
+            padding: 6px 8px;
+            font-family: inherit;
+            font-size: 9.5pt;
+            color: #1F2933;
+            width: 100%;
+            user-select: text;
+        }
+        .line-edit:focus {
+            outline: none;
+            border-color: #2F80ED;
+            box-shadow: 0 0 0 2px rgba(47, 128, 237, 0.15);
+        }
+        .line-edit::placeholder {
+            color: #94A3B8;
+        }
+
+        /* Matplotlib Navigation Toolbar Style */
+        .mpl-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background-color: #F8FAFC;
+            border: 1px solid #CBD5E1;
+            border-radius: 6px;
+            padding: 4px 10px;
+            flex-shrink: 0;
+        }
+        .tool-btn {
+            background-color: #FFFFFF;
+            color: #243B53;
+            border: 1px solid #CBD5E1;
+            border-radius: 5px;
+            padding: 4px 9px;
+            font-size: 9pt;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .tool-btn:hover {
+            background-color: #E2E8F0;
+        }
+        .tool-btn.active {
+            background-color: #BEE3F8;
+            border-color: #2F80ED;
+            color: #102A43;
+        }
+        .toolbar-coords {
+            margin-left: auto;
+            font-family: Consolas, "Courier New", monospace;
+            font-size: 9pt;
+            color: #475569;
+        }
+
+        /* Graph Canvas Container */
+        .canvas-container {
+            position: relative;
+            flex: 1;
+            background-color: #FFFFFF;
+            border: 1px solid #BCCCDC;
+            border-radius: 6px;
+            overflow: hidden;
+            min-height: 160px;
+        }
+        #plotCanvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        /* Graph Control Grid (그래프 확대 범위 및 저장) */
+        .graph-control-grid {
+            display: grid;
+            grid-template-columns: auto 1fr auto 1fr 145px;
+            gap: 8px;
+            align-items: center;
+        }
+        .control-label {
+            color: #243B53;
+            font-size: 9.5pt;
+            white-space: nowrap;
+            padding: 0 4px;
+        }
+
+        /* Analysis QTextEdit Style */
+        .analysis-group {
+            flex: 1;
+            min-height: 0;
+        }
+        .analysis-text {
+            flex: 1;
+            width: 100%;
+            height: 100%;
+            background-color: #FFFFFF;
+            color: #102A43;
+            border: 1px solid #BCCCDC;
+            border-radius: 6px;
+            padding: 8px 10px;
+            font-family: Consolas, "Courier New", "Malgun Gothic", monospace;
+            font-size: 9.5pt;
+            line-height: 1.45;
+            white-space: pre;
+            overflow: auto;
+            resize: none;
+            user-select: text;
+        }
+        .analysis-text:focus {
+            outline: none;
+        }
+
+        /* Modal Dialog for messages (Mimics QMessageBox) */
+        .modal-backdrop {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.45);
+            z-index: 9999;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-backdrop.show {
+            display: flex;
+        }
+        .modal-box {
+            background: #FFFFFF;
+            border-radius: 8px;
+            width: 420px;
+            max-width: 92vw;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
+            border: 1px solid #B8C2CC;
+            overflow: hidden;
+        }
+        .modal-header {
+            background: #243B53;
+            color: #FFFFFF;
+            padding: 8px 14px;
+            font-weight: bold;
+            font-size: 10pt;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .modal-body {
+            padding: 18px 16px;
+            color: #1F2933;
+            font-size: 9.5pt;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .modal-footer {
+            padding: 8px 16px 12px 16px;
+            display: flex;
+            justify-content: flex-end;
+            background: #F8FAFC;
+            border-top: 1px solid #E2E8F0;
+        }
+    </style>
+</head>
+<body>
+<div class="app-window" id="appWindow">
+    <!-- Top Window Bar -->
+    <div class="window-titlebar">
+        <div class="title-text">
+            <span>📊 엑셀/CSV 데이터 Graph Analyzer V1.0 ⚡ (Authored by JH Lee)</span>
+        </div>
+        <div class="status-badge" id="statusBadge">Ready</div>
+    </div>
+
+    <!-- Main Horizontal Splitter Layout -->
+    <div class="main-container" id="mainContainer">
+        <!-- Left Control Panel -->
+        <div class="left-panel" id="leftPanel">
+            <input type="file" id="fileInput" accept=".csv,.xlsx" style="display: none;" />
+            <button class="btn" id="btnLoadCsv" title="로컬 PC의 CSV 또는 XLSX 엑셀 파일을 불러옵니다.">📂 csv/xlsx 파일 로딩</button>
+            <div class="lbl-file" id="lblFile">선택된 파일: 없음</div>
+
+            <!-- x축 데이터 선택 -->
+            <div class="group-box grp-x">
+                <span class="group-box-title">x축 데이터 선택</span>
+                <div class="list-widget" id="xList" tabindex="0"></div>
+            </div>
+
+            <!-- y축 데이터 선택 - 다중 선택 가능 -->
+            <div class="group-box grp-y">
+                <span class="group-box-title">y축 데이터 선택 - 다중 선택 가능</span>
+                <div class="list-widget" id="yList" tabindex="0"></div>
+                <button class="btn" id="btnSelectData">⬇ 데이터 선택</button>
+            </div>
+
+            <!-- y축 선택 데이터 -->
+            <div class="group-box grp-selected-y">
+                <span class="group-box-title">y축 선택 데이터</span>
+                <div class="list-widget" id="selectedYList" tabindex="0"></div>
+                <button class="btn" id="btnRemoveData">❌ 제거</button>
+            </div>
+
+            <!-- 그래프 출력 및 전체 선택 -->
+            <button class="btn" id="btnPlot">📈 그래프 출력</button>
+            <button class="btn" id="btnSelectAllY">✅ 유효 CH 전체 선택</button>
+
+            <div style="flex: 0.2;"></div>
+            <button class="btn btn-danger" id="btnExit">❌ 종료</button>
+        </div>
+
+        <!-- Vertical Splitter Handle -->
+        <div class="splitter-v" id="splitterV"></div>
+
+        <!-- Right Panel -->
+        <div class="right-panel" id="rightPanel">
+            <!-- Top Graph Panel -->
+            <div class="graph-panel" id="graphPanel">
+                <!-- Matplotlib-like Navigation Toolbar -->
+                <div class="mpl-toolbar">
+                    <button class="tool-btn" id="toolHome" title="초기 배율로 복원 (Home)">🏠 초기화</button>
+                    <button class="tool-btn" id="toolZoom" title="마우스 드래그로 영역 확대 (Box Zoom)">🔍 영역 확대</button>
+                    <button class="tool-btn" id="toolPan" title="마우스 드래그로 그래프 이동 (Pan)">✋ 이동</button>
+                    <span style="font-size: 8.5pt; color: #64748B; margin-left: 6px;">
+                        💡 팁: 마우스 커서를 선 위에 올리면 상세 좌표 툴팁이 표시됩니다.
+                    </span>
+                    <span class="toolbar-coords" id="toolbarCoords"></span>
+                </div>
+
+                <!-- Interactive High-DPI Matplotlib-Style Canvas -->
+                <div class="canvas-container" id="canvasContainer">
+                    <canvas id="plotCanvas"></canvas>
+                </div>
+
+                <!-- 그래프 확대 범위 및 저장 -->
+                <div class="group-box" style="flex-shrink: 0;">
+                    <span class="group-box-title">그래프 확대 범위 및 저장</span>
+                    <div class="graph-control-grid">
+                        <!-- Row 0: X-Axis Range -->
+                        <label class="control-label" for="editXMin">x축 최소값</label>
+                        <input type="text" class="line-edit" id="editXMin" placeholder="예: 00:00 / 08-10 07:43 / 2026-08-10 07:43" />
+                        <label class="control-label" for="editXMax">x축 최대값</label>
+                        <input type="text" class="line-edit" id="editXMax" placeholder="예: 01:00 / 08-10 08:43 / 2026-08-10 08:43" />
+                        <button class="btn" id="btnApplyX">x축 선택</button>
+
+                        <!-- Row 1: Y-Axis Range -->
+                        <label class="control-label" for="editYMin">y축 최소값</label>
+                        <input type="text" class="line-edit" id="editYMin" placeholder="예: 10" />
+                        <label class="control-label" for="editYMax">y축 최대값</label>
+                        <input type="text" class="line-edit" id="editYMax" placeholder="예: 100" />
+                        <button class="btn" id="btnApplyY">y축 선택</button>
+
+                        <!-- Row 2: Save Buttons -->
+                        <div></div>
+                        <div></div>
+                        <div></div>
+                        <button class="btn" id="btnSaveCsv" style=" justify-self: end; width: 100%; max-width: 180px;">💾 CSV 파일 저장</button>
+                        <button class="btn" id="btnSaveJpg">🖼 그래프(jpg) 저장</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Horizontal Splitter Handle -->
+            <div class="splitter-h" id="splitterH"></div>
+
+            <!-- Bottom Analysis Panel -->
+            <div class="analysis-panel" id="analysisPanel">
+                <div class="group-box analysis-group">
+                    <span class="group-box-title">데이터 분석 출력</span>
+                    <textarea class="analysis-text" id="analysisText" readonly spellcheck="false"></textarea>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Dialog -->
+<div class="modal-backdrop" id="modalBackdrop">
+    <div class="modal-box">
+        <div class="modal-header">
+            <span id="modalTitle">알림</span>
+        </div>
+        <div class="modal-body" id="modalMessage"></div>
+        <div class="modal-footer">
+            <button class="btn" id="modalOkBtn" style="padding: 6px 20px;">확인</button>
+        </div>
+    </div>
+</div>
+
+<script>
+/**
+ * 엑셀/CSV 데이터 Graph Analyzer V1.0
+ * 01_General_CSV_Analyzer_1.py 의 모든 전처리/시계열 파싱/통계/그래프 기능을 100% 동일하게 브라우저에서 구현
+ */
+(() => {
+    // -------------------------------------------------------------------------
+    // Global Application State (mirrors CompVibOverallGraphGUI attributes)
+    // -------------------------------------------------------------------------
+    const state = {
+        df: null,                // Array of row objects (sorted by Time_dt)
+        columns: [],             // Standardized column names
+        fileName: null,          // Loaded file name
+        zeroColumns: [],         // Constant/empty columns removed from analysis
+        nonzeroColumns: [],      // Active columns with >1 unique value
+        currentPlotDf: null,     // Filtered rows currently plotted
+        currentXCol: "Time",     // Selected X column
+        currentYCols: [],        // Selected Y columns
+
+        // List widget selections
+        xSelected: [],           // Single selection array
+        ySelected: [],           // Multi selection in y_list
+         yLastClickedIdx: -1,
+        selectedYItems: [],      // Items added to selected_y_list
+        selectedYHighlight: [],  // Highlighted items inside selected_y_list
+        selectedYLastIdx: -1,
+
+        // Interactive Graph State
+        plotSeries: [],          // [{ col, color, points: [{x, y, rawRow}] }]
+        xDomain: [0, 1],         // Current [xMin, xMax]
+        yDomain: [0, 1],         // Current [yMin, yMax]
+        initialXDomain: [0, 1],
+        initialYDomain: [0, 1],
+        isTimeAxis: true,
+        hasYearGT1900: true,
+        hoverPoint: null,        // { col, color, xVal, yVal, screenX, screenY }
+        interactionMode: null,   // null | 'zoom' | 'pan'
+        dragStart: null,         // { x, y, xDomain, yDomain }
+        dragCurrent: null        // { x, y }
+    };
+
+    const COLOR_CYCLE = [
+        "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
+        "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf",
+        "#003f5c", "#58508d", "#bc5090", "#ff6361", "#ffa600",
+        "#006d77", "#83c5be", "#3a86ff", "#8338ec", "#fb5607"
+    ];
+
+    // DOM Elements
+    const fileInput = document.getElementById("fileInput");
+    const btnLoadCsv = document.getElementById("btnLoadCsv");
+    const lblFile = document.getElementById("lblFile");
+    const xListEl = document.getElementById("xList");
+    const yListEl = document.getElementById("yList");
+    const selectedYListEl = document.getElementById("selectedYList");
+    const btnSelectData = document.getElementById("btnSelectData");
+    const btnRemoveData = document.getElementById("btnRemoveData");
+    const btnPlot = document.getElementById("btnPlot");
+    const btnSelectAllY = document.getElementById("btnSelectAllY");
+    const btnExit = document.getElementById("btnExit");
+
+    const editXMin = document.getElementById("editXMin");
+    const editXMax = document.getElementById("editXMax");
+    const btnApplyX = document.getElementById("btnApplyX");
+    const editYMin = document.getElementById("editYMin");
+    const editYMax = document.getElementById("editYMax");
+    const btnApplyY = document.getElementById("btnApplyY");
+    const btnSaveCsv = document.getElementById("btnSaveCsv");
+    const btnSaveJpg = document.getElementById("btnSaveJpg");
+
+    const toolHome = document.getElementById("toolHome");
+    const toolZoom = document.getElementById("toolZoom");
+    const toolPan = document.getElementById("toolPan");
+    const toolbarCoords = document.getElementById("toolbarCoords");
+
+    const canvasContainer = document.getElementById("canvasContainer");
+    const plotCanvas = document.getElementById("plotCanvas");
+    const analysisText = document.getElementById("analysisText");
+    const statusBadge = document.getElementById("statusBadge");
+
+    // -------------------------------------------------------------------------
+    // Modal Helper (QMessageBox equivalent)
+    // -------------------------------------------------------------------------
+    function showMessageBox(title, message) {
+        document.getElementById("modalTitle").textContent = title;
+        document.getElementById("modalMessage").textContent = message;
+        document.getElementById("modalBackdrop").classList.add("show");
+    }
+    document.getElementById("modalOkBtn").addEventListener("click", () => {
+        document.getElementById("modalBackdrop").classList.remove("show");
+    });
+
+    // -------------------------------------------------------------------------
+    // 1. File Reading & Smart Encoding Detection (UTF-8 / CP949 / EUC-KR / XLSX)
+    // -------------------------------------------------------------------------
+    btnLoadCsv.addEventListener("click", () => {
+        fileInput.value = "";
+        fileInput.click();
+    });
+
+    fileInput.addEventListener("change", async (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        await handleFileLoad(file);
+    });
+
+    async function handleFileLoad(file) {
+        try {
+            statusBadge.textContent = "Loading...";
+            const buffer = await file.arrayBuffer();
+            const ext = file.name.substring(file.name.lastIndexOf(".")).toLowerCase();
+
+            let rawParsed;
+            if (ext === ".xlsx" || ext === ".xls") {
+                rawParsed = parseExcelBuffer(buffer);
+            } else {
+                const text = decodeCsvSmart(buffer);
+                rawParsed = parseCsvText(text);
+            }
+
+            const stdData = standardizeColumns(rawParsed.headers, rawParsed.rows);
+            const processed = preprocessDataframe(stdData.columns, stdData.rows);
+
+            state.fileName = file.name;
+            state.df = processed.df;
+            state.columns = processed.columns;
+            state.zeroColumns = processed.zeroColumns;
+            state.nonzeroColumns = processed.nonzeroColumns;
+            state.currentPlotDf = null;
+            state.currentYCols = [];
+            state.currentXCol = "Time";
+            state.selectedYItems = [];
+            state.selectedYHighlight = [];
+
+            lblFile.textContent = `선택된 파일: ${state.fileName}`;
+            populateColumnLists();
+            updateFileInformationOnly();
+            drawEmptyGraph();
+            statusBadge.textContent = `Loaded: ${state.fileName} (${state.df.length.toLocaleString()} rows)`;
+        } catch (err) {
+            statusBadge.textContent = "Error";
+            showMessageBox("CSV 로딩 오류", `CSV 파일 로딩 중 오류가 발생했습니다.\n\n${err.message || err}`);
+        }
+    }
+
+    function decodeCsvSmart(buffer) {
+        const uint8 = new Uint8Array(buffer);
+        // Check UTF-8 BOM
+        if (uint8.length >= 3 && uint8[0] === 0xEF && uint8[1] === 0xBB && uint8[2] === 0xBF) {
+            return new TextDecoder("utf-8").decode(uint8.subarray(3));
+        }
+        // Try strict UTF-8 first
+        try {
+            return new TextDecoder("utf-8", { fatal: true }).decode(uint8);
+        } catch (_) {
+            // Fallback to EUC-KR / CP949 (WHATWG 'euc-kr' decoder handles CP949 extensions)
+            try {
+                return new TextDecoder("euc-kr", { fatal: false }).decode(uint8);
+            } catch (err) {
+                throw new Error("CSV 파일 인코딩을 확인할 수 없습니다. 지원 인코딩: UTF-8-SIG, CP949, EUC-KR");
+            }
+        }
+    }
+
+    function parseExcelBuffer(buffer) {
+        if (typeof XLSX === "undefined") {
+            throw new Error("엑셀(xlsx) 파서 라이브러리가 로드되지 않았습니다.");
+        }
+        const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
+        const firstSheetName = workbook.SheetNames[0];
+        if (!firstSheetName) throw new Error("엑셀 파일에 시트가 없습니다.");
+        const sheet = workbook.Sheets[firstSheetName];
+        const aoa = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: "" });
+        if (!aoa || aoa.length < 2) throw new Error("엑셀 파일에 데이터가 없습니다.");
+        const rawHeaders = aoa[0].map(h => String(h ?? "").trim());
+        if (rawHeaders.length < 2) throw new Error("엑셀 파일에서 2개 이상의 column을 찾지 못했습니다.");
+        const headers = mangleDupeCols(rawHeaders);
+        const rows = [];
+        for (let r = 1; r < aoa.length; r++) {
+            const rowArr = aoa[r];
+            if (!rowArr || rowArr.every(cell => String(cell ?? "").trim() === "")) continue;
+            rows.push(rowArr.map(cell => String(cell ?? "").trim()));
+        }
+        if (rows.length === 0) throw new Error("엑셀 파일에 데이터가 없습니다.");
+        return { headers, rows };
+    }
+
+    // Mimics pandas read_csv(..., header=0, skipinitialspace=True)
+    function parseCsvText(text) {
+        const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+        const nonEmptyLines = [];
+        for (let i = 0; i < lines.length; i++) {
+            if (lines[i].trim() !== "") {
+                nonEmptyLines.push(lines[i]);
+            }
+        }
+        if (nonEmptyLines.length < 2) {
+            throw new Error("CSV 파일에 데이터가 없습니다.");
+        }
+
+        const rawHeaders = parseCsvLine(nonEmptyLines[0], true);
+        if (rawHeaders.length < 2) {
+            throw new Error("CSV 파일에서 2개 이상의 column을 찾지 못했습니다.");
+        }
+        const headers = mangleDupeCols(rawHeaders);
+
+        const rows = [];
+        for (let i = 1; i < nonEmptyLines.length; i++) {
+            const parsedRow = parseCsvLine(nonEmptyLines[i], true);
+            if (parsedRow.length === 1 && parsedRow[0] === "") continue;
+            rows.push(parsedRow);
+        }
+        if (rows.length === 0) {
+            throw new Error("CSV 파일에 데이터가 없습니다.");
+        }
+        return { headers, rows };
+    }
+
+    // RFC-4180 CSV line parser with skipinitialspace=True
+    function parseCsvLine(line, skipInitialSpace = true) {
+        const result = [];
+        let cur = "";
+        let inQuotes = false;
+        let i = 0;
+        const len = line.length;
+
+        while (i < len) {
+            const ch = line[i];
+            if (!inQuotes && cur === "" && skipInitialSpace && ch === " ") {
+                i++;
+                continue;
+            }
+            if (ch === '"') {
+                if (inQuotes && i + 1 < len && line[i + 1] === '"') {
+                    cur += '"';
+                    i += 2;
+                    continue;
+                }
+                inQuotes = !inQuotes;
+                i++;
+                continue;
+            }
+            if (ch === "," && !inQuotes) {
+                result.push(cur);
+                cur = "";
+                i++;
+                continue;
+            }
+            cur += ch;
+            i++;
+        }
+        result.push(cur);
+        return result;
+    }
+
+    // Mimics pandas default mangle_dupe_cols before _standardize_columns
+    function mangleDupeCols(rawHeaders) {
+        const counts = {};
+        return rawHeaders.map((h, idx) => {
+            let name = String(h ?? "");
+            if (name === "") {
+                name = `Unnamed: ${idx}`;
+            }
+            if (counts[name] === undefined) {
+                counts[name] = 0;
+                return name;
+            } else {
+                counts[name] += 1;
+                return `${name}.${counts[name]}`;
+            }
+        });
+    }
+
+    // -------------------------------------------------------------------------
+    // 2. Column Standardization & Time Series / Numeric Preprocessing
+    // -------------------------------------------------------------------------
+    function standardizeColumns(rawHeaders, rawRows) {
+        const columns = [];
+        const seen = {};
+        for (let i = 0; i < rawHeaders.length; i++) {
+            let c = String(rawHeaders[i]).trim().replace(/'/g, "");
+            if (c === "" || c.toLowerCase().startsWith("unnamed")) {
+                c = (i === 0) ? "Time" : `CH${i}`;
+            }
+            if (Object.prototype.hasOwnProperty.call(seen, c)) {
+                seen[c] += 1;
+                c = `${c}_${seen[c]}`;
+            } else {
+                seen[c] = 0;
+            }
+            columns.push(c);
+        }
+
+        if (!columns.includes("Time") && columns.length > 0) {
+            columns[0] = "Time";
+        }
+
+        return { columns, rows: rawRows };
+    }
+
+    function parseSingleTimeStr(rawStr) {
+        let s = String(rawStr ?? "").trim().replace(/'/g, "");
+        s = s.replace(/\s+/g, " ");
+        s = s.replace(/오전/g, "AM").replace(/오후/g, "PM");
+        if (!s) return null;
+
+        // 1. YYYY-MM-DD (AM/PM) hh:mm(:ss)(.fff) or YYYY-MM-DD hh:mm(:ss)(.fff) (AM/PM)
+        // Format A: YYYY-MM-DD AM/PM I:M(:S)(.f)
+        let m = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})\s+(AM|PM)\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2})(?:\.(\d+))?)?$/i);
+        if (m) {
+            const year = parseInt(m[1], 10);
+            const month = parseInt(m[2], 10);
+            const day = parseInt(m[3], 10);
+            const ampm = m[4].toUpperCase();
+            let hour = parseInt(m[5], 10);
+            const min = parseInt(m[6], 10);
+            const sec = m[7] ? parseInt(m[7], 10) : 0;
+            const ms = m[8] ? parseInt(m[8].padEnd(3, "0").slice(0, 3), 10) : 0;
+            if (hour < 1 || hour > 12) return null;
+            if (ampm === "AM" && hour === 12) hour = 0;
+            if (ampm === "PM" && hour < 12) hour += 12;
+            return new Date(year, month - 1, day, hour, min, sec, ms);
+        }
+
+        // Format B: YYYY-MM-DD I:M(:S)(.f) AM/PM
+        m = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2})(?:\.(\d+))?)?\s+(AM|PM)$/i);
+        if (m) {
+            const year = parseInt(m[1], 10);
+            const month = parseInt(m[2], 10);
+            const day = parseInt(m[3], 10);
+            let hour = parseInt(m[4], 10);
+            const min = parseInt(m[5], 10);
+            const sec = m[6] ? parseInt(m[6], 10) : 0;
+            const ms = m[7] ? parseInt(m[7].padEnd(3, "0").slice(0, 3), 10) : 0;
+            const ampm = m[8].toUpperCase();
+            if (hour < 1 || hour > 12) return null;
+            if (ampm === "AM" && hour === 12) hour = 0;
+            if (ampm === "PM" && hour < 12) hour += 12;
+            return new Date(year, month - 1, day, hour, min, sec, ms);
+        }
+
+        // Format C: YYYY-MM-DD HH:MM(:SS)(.fff) (24-hour)
+        m = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2})(?:\.(\d+))?)?$/);
+        if (m) {
+            const year = parseInt(m[1], 10);
+            const month = parseInt(m[2], 10);
+            const day = parseInt(m[3], 10);
+            const hour = parseInt(m[4], 10);
+            const min = parseInt(m[5], 10);
+            const sec = m[6] ? parseInt(m[6], 10) : 0;
+            const ms = m[7] ? parseInt(m[7].padEnd(3, "0").slice(0, 3), 10) : 0;
+            return new Date(year, month - 1, day, hour, min, sec, ms);
+        }
+
+        // Format D: Time-only HH:MM(:SS)(.fff) -> year 1900, month 1, day 1
+        m = s.match(/^(\d{1,2}):(\d{1,2})(?::(\d{1,2})(?:\.(\d+))?)?$/);
+        if (m) {
+            const hour = parseInt(m[1], 10);
+            const min = parseInt(m[2], 10);
+            const sec = m[3] ? parseInt(m[3], 10) : 0;
+            const ms = m[4] ? parseInt(m[4].padEnd(3, "0").slice(0, 3), 10) : 0;
+            return new Date(1900, 0, 1, hour, min, sec, ms);
+        }
+
+        // Format E: MM-DD HH:MM(:SS)(.fff)
+        m = s.match(/^(\d{1,2})[-/](\d{1,2})\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2})(?:\.(\d+))?)?$/);
+        if (m) {
+            const month = parseInt(m[1], 10);
+            const day = parseInt(m[2], 10);
+            const hour = parseInt(m[3], 10);
+            const min = parseInt(m[4], 10);
+            const sec = m[5] ? parseInt(m[5], 10) : 0;
+            const ms = m[6] ? parseInt(m[6].padEnd(3, "0").slice(0, 3), 10) : 0;
+            return new Date(1900, month - 1, day, hour, min, sec, ms);
+        }
+
+        const fallback = new Date(s);
+        if (!isNaN(fallback.getTime())) {
+            return fallback;
+        }
+        return null;
+    }
+
+    function toNumericOrNaN(val) {
+        if (val === null || val === undefined) return NaN;
+        const s = String(val).trim();
+        if (s === "" || s.toLowerCase() === "nan" || s.toLowerCase() === "null" || s.toLowerCase() === "none") {
+            return NaN;
+        }
+        const n = Number(s);
+        return Number.isFinite(n) ? n : NaN;
+    }
+
+    function preprocessDataframe(columns, rawRows) {
+        const timeColIdx = columns.indexOf("Time");
+        const yColIndices = [];
+        const yCols = [];
+        for (let i = 0; i < columns.length; i++) {
+            if (columns[i] !== "Time" && columns[i] !== "Time_dt") {
+                yColIndices.push(i);
+                yCols.push(columns[i]);
+            }
+        }
+
+        const failedTimes = [];
+        const rows = [];
+
+        for (let r = 0; r < rawRows.length; r++) {
+            const rawRow = rawRows[r];
+            const rawTime = String(rawRow[timeColIdx] ?? "").trim().replace(/'/g, "");
+            const dt = parseSingleTimeStr(rawTime);
+            if (!dt || isNaN(dt.getTime())) {
+                if (failedTimes.length < 5) failedTimes.push(rawTime);
+            }
+            const rowObj = {
+                Time: rawTime,
+                Time_dt: dt ? dt.getTime() : NaN,
+                _origIdx: r
+            };
+            for (let j = 0; j < yCols.length; j++) {
+                const colName = yCols[j];
+                const colIdx = yColIndices[j];
+                rowObj[colName] = toNumericOrNaN(rawRow[colIdx]);
+            }
+            rows.push(rowObj);
+        }
+
+        if (failedTimes.length > 0) {
+            throw new Error(`Time 컬럼의 일부 값을 시간 형식으로 변환하지 못했습니다. 예: ${failedTimes.join(", ")}`);
+        }
+
+        // Separate zero_columns (<= 1 unique non-NaN value) vs nonzero_columns
+        const zeroColumns = [];
+        const nonzeroColumns = [];
+
+        for (let j = 0; j < yCols.length; j++) {
+            const col = yCols[j];
+            const uniqueVals = new Set();
+            for (let r = 0; r < rows.length; r++) {
+                const v = rows[r][col];
+                if (!Number.isNaN(v)) {
+                    uniqueVals.add(v);
+                    if (uniqueVals.size > 1) break;
+                }
+            }
+            if (uniqueVals.size <= 1) {
+                zeroColumns.push(col);
+            } else {
+                nonzeroColumns.push(col);
+            }
+        }
+
+        // Keep only Time, Time_dt, and nonzeroColumns, then mergesort (stable sort) by Time_dt
+        const cleanRows = rows.map(r => {
+            const obj = {
+                Time: r.Time,
+                Time_dt: r.Time_dt,
+                _origIdx: r._origIdx
+            };
+            for (let i = 0; i < nonzeroColumns.length; i++) {
+                const c = nonzeroColumns[i];
+                obj[c] = r[c];
+            }
+            return obj;
+        });
+
+        cleanRows.sort((a, b) => {
+            if (a.Time_dt !== b.Time_dt) return a.Time_dt - b.Time_dt;
+            return a._origIdx - b._origIdx;
+        });
+
+        return {
+            df: cleanRows,
+            columns: ["Time", "Time_dt", ...nonzeroColumns],
+            zeroColumns,
+            nonzeroColumns
+        };
+    }
+
+    // -------------------------------------------------------------------------
+    // 3. UI List Widgets & Selection Logic
+    // -------------------------------------------------------------------------
+    function populateColumnLists() {
+        const xCandidates = ["Time", ...state.nonzeroColumns];
+        state.xSelected = ["Time"];
+        state.ySelected = [];
+        state.yLastClickedIdx = -1;
+        state.selectedYItems = [];
+        state.selectedYHighlight = [];
+        state.selectedYLastIdx = -1;
+
+        renderXList(xCandidates);
+        renderYList();
+        renderSelectedYList();
+    }
+
+    function renderXList(xCandidates) {
+        xListEl.innerHTML = "";
+        xCandidates.forEach((col) => {
+            const div = document.createElement("div");
+            div.className = "list-item" + (state.xSelected.includes(col) ? " selected" : "");
+            div.textContent = col;
+            div.addEventListener("click", () => {
+                state.xSelected = [col];
+                renderXList(xCandidates);
+            });
+            xListEl.appendChild(div);
+        });
+    }
+
+    function renderYList() {
+        yListEl.innerHTML = "";
+        state.nonzeroColumns.forEach((col, idx) => {
+            const div = document.createElement("div");
+            div.className = "list-item" + (state.ySelected.includes(col) ? " selected" : "");
+            div.textContent = col;
+
+            div.addEventListener("click", (e) => {
+                if (e.shiftKey && state.yLastClickedIdx !== -1) {
+                    const start = Math.min(state.yLastClickedIdx, idx);
+                    const end = Math.max(state.yLastClickedIdx, idx);
+                    const rangeCols = state.nonzeroColumns.slice(start, end + 1);
+                    if (e.ctrlKey || e.metaKey) {
+                        const set = new Set([...state.ySelected, ...rangeCols]);
+                        state.ySelected = Array.from(set);
+                    } else {
+                        state.ySelected = rangeCols;
+                    }
+                } else if (e.ctrlKey || e.metaKey) {
+                    if (state.ySelected.includes(col)) {
+                        state.ySelected = state.ySelected.filter(c => c !== col);
+                    } else {
+                        state.ySelected.push(col);
+                    }
+                    state.yLastClickedIdx = idx;
+                } else {
+                    state.ySelected = [col];
+                    state.yLastClickedIdx = idx;
+                }
+                renderYList();
+            });
+
+            div.addEventListener("dblclick", () => {
+                if (!state.selectedYItems.includes(col)) {
+                    state.selectedYItems.push(col);
+                    renderSelectedYList();
+                }
+            });
+
+            yListEl.appendChild(div);
+        });
+    }
+
+    function renderSelectedYList() {
+        selectedYListEl.innerHTML = "";
+        state.selectedYItems.forEach((col, idx) => {
+            const div = document.createElement("div");
+            div.className = "list-item" + (state.selectedYHighlight.includes(col) ? " selected" : "");
+            div.textContent = col;
+
+            div.addEventListener("click", (e) => {
+                if (e.shiftKey && state.selectedYLastIdx !== -1) {
+                    const start = Math.min(state.selectedYLastIdx, idx);
+                    const end = Math.max(state.selectedYLastIdx, idx);
+                    state.selectedYHighlight = state.selectedYItems.slice(start, end + 1);
+                } else if (e.ctrlKey || e.metaKey) {
+                    if (state.selectedYHighlight.includes(col)) {
+                        state.selectedYHighlight = state.selectedYHighlight.filter(c => c !== col);
+                    } else {
+                        state.selectedYHighlight.push(col);
+                    }
+                    state.selectedYLastIdx = idx;
+                } else {
+                    state.selectedYHighlight = [col];
+                    state.selectedYLastIdx = idx;
+                }
+                renderSelectedYList();
+            });
+
+            div.addEventListener("dblclick", () => {
+                state.selectedYItems = state.selectedYItems.filter(c => c !== col);
+                state.selectedYHighlight = state.selectedYHighlight.filter(c => c !== col);
+                renderSelectedYList();
+            });
+
+            selectedYListEl.appendChild(div);
+        });
+    }
+
+    // ⬇ 데이터 선택
+    btnSelectData.addEventListener("click", () => {
+        for (const col of state.ySelected) {
+            if (!state.selectedYItems.includes(col)) {
+                state.selectedYItems.push(col);
+            }
+        }
+        renderSelectedYList();
+    });
+
+    // ❌ 제거
+    btnRemoveData.addEventListener("click", () => {
+        if (state.selectedYHighlight.length === 0) return;
+        const removeSet = new Set(state.selectedYHighlight);
+        state.selectedYItems = state.selectedYItems.filter(c => !removeSet.has(c));
+        state.selectedYHighlight = [];
+        state.selectedYLastIdx = -1;
+        renderSelectedYList();
+    });
+
+    // ✅ 유효 CH 전체 선택
+    btnSelectAllY.addEventListener("click", () => {
+        if (!state.df) return;
+        state.ySelected = [...state.nonzeroColumns];
+        // Also populate selectedYItems if empty or select all in y_list just like PyQt5
+        renderYList();
+    });
+
+    // ❌ 종료
+    btnExit.addEventListener("click", () => {
+        if (confirm("엑셀/CSV 데이터 Graph Analyzer V1.0 프로그램을 초기화/종료하시겠습니까?")) {
+            state.df = null;
+            state.fileName = null;
+            state.zeroColumns = [];
+            state.nonzeroColumns = [];
+            state.currentPlotDf = null;
+            state.xSelected = [];
+            state.ySelected = [];
+            state.selectedYItems = [];
+            state.selectedYHighlight = [];
+            lblFile.textContent = "선택된 파일: 없음";
+            xListEl.innerHTML = "";
+            yListEl.innerHTML = "";
+            selectedYListEl.innerHTML = "";
+            editXMin.value = "";
+            editXMax.value = "";
+            editYMin.value = "";
+            editYMax.value = "";
+            analysisText.value = "";
+            statusBadge.textContent = "Ready";
+            drawEmptyGraph();
+            try { window.close(); } catch (_) {}
+        }
+    });
+
+    // -------------------------------------------------------------------------
+    // 4. Time Bound Parsing & Filtering (Mirrors _make_filtered_plot_dataframe)
+    // -------------------------------------------------------------------------
+    function parseTimeBound(text, referenceDf, isMax = false) {
+        let rawText = String(text ?? "").trim().replace(/'/g, "");
+        rawText = rawText.replace(/\s+/g, " ");
+        rawText = rawText.replace(/오전/g, "AM").replace(/오후/g, "PM");
+
+        let refDate = null;
+        if (referenceDf && referenceDf.length > 0) {
+            let boundTs = isMax ? -Infinity : Infinity;
+            for (let i = 0; i < referenceDf.length; i++) {
+                const ts = referenceDf[i].Time_dt;
+                if (!Number.isNaN(ts)) {
+                    if (isMax && ts > boundTs) boundTs = ts;
+                    if (!isMax && ts < boundTs) boundTs = ts;
+                }
+            }
+            if (Number.isFinite(boundTs)) {
+                refDate = new Date(boundTs);
+            }
+        }
+
+        // 1. No-year formats: %m-%d %H:%M:%S.%f, %m-%d %H:%M:%S, %m-%d %H:%M
+        if (refDate !== null) {
+            const refYear = refDate.getFullYear();
+            const mNoYear = rawText.match(/^(\d{1,2})-(\d{1,2})\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2})(?:\.(\d+))?)?$/);
+            if (mNoYear) {
+                const month = parseInt(mNoYear[1], 10);
+                const day = parseInt(mNoYear[2], 10);
+                const hour = parseInt(mNoYear[3], 10);
+                const min = parseInt(mNoYear[4], 10);
+                const sec = mNoYear[5] ? parseInt(mNoYear[5], 10) : 0;
+                const ms = mNoYear[6] ? parseInt(mNoYear[6].padEnd(3, "0").slice(0, 3), 10) : 0;
+                return new Date(refYear, month - 1, day, hour, min, sec, ms).getTime();
+            }
+        }
+
+        // 2. Time-only formats: %H:%M:%S.%f, %H:%M:%S, %H:%M
+        const mTimeOnly = rawText.match(/^(\d{1,2}):(\d{1,2})(?::(\d{1,2})(?:\.(\d+))?)?$/);
+        if (mTimeOnly) {
+            const hour = parseInt(mTimeOnly[1], 10);
+            const min = parseInt(mTimeOnly[2], 10);
+            const sec = mTimeOnly[3] ? parseInt(mTimeOnly[3], 10) : 0;
+            const ms = mTimeOnly[4] ? parseInt(mTimeOnly[4].padEnd(3, "0").slice(0, 3), 10) : 0;
+            if (refDate !== null && refDate.getFullYear() > 1900) {
+                return new Date(
+                    refDate.getFullYear(),
+                    refDate.getMonth(),
+                    refDate.getDate(),
+                    hour, min, sec, ms
+                ).getTime();
+            }
+            return new Date(1900, 0, 1, hour, min, sec, ms).getTime();
+        }
+
+        // 3. Full formats with year
+        const dt = parseSingleTimeStr(rawText);
+        if (dt && !isNaN(dt.getTime())) {
+            return dt.getTime();
+        }
+
+        throw new Error(`x축 시간 범위를 해석할 수 없습니다: ${rawText}`);
+    }
+
+    function makeFilteredPlotDataframe(xCol, yCols) {
+        const xMinText = editXMin.value.trim();
+        const xMaxText = editXMax.value.trim();
+
+        let filtered = state.df;
+
+        if (xCol === "Time") {
+            if (xMinText) {
+                const xMinTs = parseTimeBound(xMinText, filtered, false);
+                filtered = filtered.filter(r => r.Time_dt >= xMinTs);
+            }
+            if (xMaxText) {
+                const xMaxTs = parseTimeBound(xMaxText, filtered, true);
+                filtered = filtered.filter(r => r.Time_dt <= xMaxTs);
+            }
+        } else {
+            const minVal = xMinText ? Number(xMinText) : null;
+            const maxVal = xMaxText ? Number(xMaxText) : null;
+            if (xMinText && Number.isNaN(minVal)) {
+                throw new Error(`x축 최소값을 숫자로 변환할 수 없습니다: ${xMinText}`);
+            }
+            if (xMaxText && Number.isNaN(maxVal)) {
+                throw new Error(`x축 최대값을 숫자로 변환할 수 없습니다: ${xMaxText}`);
+            }
+            filtered = filtered.filter(r => {
+                const v = r[xCol];
+                if (Number.isNaN(v)) return false;
+                if (minVal !== null && v < minVal) return false;
+                if (maxVal !== null && v > maxVal) return false;
+                return true;
+            });
+        }
+
+        return filtered;
+    }
+
+    // -------------------------------------------------------------------------
+    // 5. Plot Execution & Statistics Calculation
+    // -------------------------------------------------------------------------
+    btnPlot.addEventListener("click", plotSelectedData);
+    btnApplyX.addEventListener("click", plotSelectedData);
+    btnApplyY.addEventListener("click", plotSelectedData);
+
+    function plotSelectedData() {
+        if (!state.df) {
+            showMessageBox("데이터 없음", "먼저 csv/xlsx 파일을 로딩해 주세요.");
+            return;
+        }
+        if (state.xSelected.length === 0) {
+            showMessageBox("x축 선택 필요", "x축 데이터를 선택해 주세요.");
+            return;
+        }
+        if (state.selectedYItems.length === 0) {
+            showMessageBox("y축 선택 필요", "그래프로 출력할 y축 데이터를 1개 이상 선택해 주세요.");
+            return;
+        }
+
+        const xCol = state.xSelected[0];
+        const yCols = [...state.selectedYItems];
+        state.currentXCol = xCol;
+        state.currentYCols = yCols;
+
+        try {
+            const plotDf = makeFilteredPlotDataframe(xCol, yCols);
+            if (!plotDf || plotDf.length === 0) {
+                throw new Error("선택한 x축 범위에 해당하는 데이터가 없습니다.");
+            }
+
+            // Prepare Plot Series and Validate Y-axis Range before updating state
+            prepareAndDrawPlot(plotDf, xCol, yCols);
+            state.currentPlotDf = plotDf;
+            updateAnalysisText(plotDf, xCol, yCols);
+        } catch (err) {
+            showMessageBox("그래프 출력 오류", `그래프 출력 중 오류가 발생했습니다.\n\n${err.message || err}`);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // 6. Analysis Console Output (Exact match with 01_General_CSV_Analyzer_1.py)
+    // -------------------------------------------------------------------------
+    function pad2(n) {
+        return String(n).padStart(2, "0");
+    }
+    function pad3(n) {
+        return String(n).padStart(3, "0");
+    }
+
+    function formatTimeForAnalysis(ts) {
+        if (ts === null || ts === undefined || Number.isNaN(ts)) return "-";
+        const d = new Date(ts);
+        if (isNaN(d.getTime())) return "-";
+        const hh = pad2(d.getHours());
+        const mm = pad2(d.getMinutes());
+        const ss = pad2(d.getSeconds());
+        const ms = pad3(d.getMilliseconds());
+        if (d.getFullYear() > 1900) {
+            const mo = pad2(d.getMonth() + 1);
+            const da = pad2(d.getDate());
+            return `${mo}-${da} ${hh}:${mm}:${ss}.${ms}`;
+        }
+        return `${hh}:${mm}:${ss}.${ms}`;
+    }
+
+    function formatTimeForSavedCsv(ts) {
+        if (ts === null || ts === undefined || Number.isNaN(ts)) return "";
+        const d = new Date(ts);
+        if (isNaN(d.getTime())) return "";
+        const yyyy = d.getFullYear();
+        const mo = pad2(d.getMonth() + 1);
+        const da = pad2(d.getDate());
+        const hh = pad2(d.getHours());
+        const mm = pad2(d.getMinutes());
+        const ss = pad2(d.getSeconds());
+        const ms = pad3(d.getMilliseconds());
+        return `${yyyy}-${mo}-${da} ${hh}:${mm}:${ss}.${ms}`;
+    }
+
+    function makeFileInfoText() {
+        const zeroNames = state.zeroColumns.length > 0 ? state.zeroColumns.join(", ") : "없음";
+        const nonzeroNames = state.nonzeroColumns.length > 0 ? state.nonzeroColumns.join(", ") : "없음";
+        return (
+            "[File Information]\n" +
+            `- 선택 CSV 파일 이름: ${state.fileName}\n` +
+            `- 총 데이터 행의 갯수: ${state.df.length.toLocaleString("en-US")}\n` +
+            `- 모든 값이 동일하여 삭제된 column 갯수: ${state.zeroColumns.length.toLocaleString("en-US")}\n` +
+            `- 모든 값이 동일하여 삭제된 column name: ${zeroNames}\n` +
+            `- 그래프/분석 대상 column 갯수: ${state.nonzeroColumns.length.toLocaleString("en-US")}\n` +
+            `- 그래프/분석 대상 column name: ${nonzeroNames}\n`
+        );
+    }
+
+    function updateFileInformationOnly() {
+        if (!state.df) return;
+        analysisText.value = makeFileInfoText();
+    }
+
+    function updateAnalysisText(plotDf, xCol, yCols) {
+        const lines = [makeFileInfoText(), "", "[Data Analysis]"];
+
+        if (xCol === "Time") {
+            let minTs = Infinity;
+            let maxTs = -Infinity;
+            for (let i = 0; i < plotDf.length; i++) {
+                const t = plotDf[i].Time_dt;
+                if (!Number.isNaN(t)) {
+                    if (t < minTs) minTs = t;
+                    if (t > maxTs) maxTs = t;
+                }
+            }
+            const xMinStr = formatTimeForAnalysis(minTs);
+            const xMaxStr = formatTimeForAnalysis(maxTs);
+            lines.push(`- 분석 x축 범위: ${xMinStr} ~ ${xMaxStr}`);
+        } else {
+            let minX = Infinity;
+            let maxX = -Infinity;
+            for (let i = 0; i < plotDf.length; i++) {
+                const v = plotDf[i][xCol];
+                if (!Number.isNaN(v)) {
+                    if (v < minX) minX = v;
+                    if (v > maxX) maxX = v;
+                }
+            }
+            lines.push(`- 분석 x축 column: ${xCol}`);
+            lines.push(`- 분석 x축 범위: ${minX} ~ ${maxX}`);
+        }
+
+        lines.push(`- 선택 y축 column 갯수: ${yCols.length.toLocaleString("en-US")}`);
+        lines.push("");
+
+        const headerLine =
+            "Column".padEnd(22, " ") +
+            "Count".padStart(10, " ") +
+            "Mean".padStart(14, " ") +
+            "Max".padStart(14, " ") +
+            "Max Time".padStart(18, " ") +
+            "Min".padStart(14, " ") +
+            "Min Time".padStart(18, " ") +
+            "Std".padStart(14, " ") +
+            "RMS".padStart(14, " ") +
+            "Range".padStart(14, " ") +
+            "Peak-Peak".padStart(14, " ");
+        lines.push(headerLine);
+        lines.push("-".repeat(166));
+
+        for (const col of yCols) {
+            const validValues = [];
+            let maxV = -Infinity;
+            let minV = Infinity;
+            let maxRow = null;
+            let minRow = null;
+            let sum = 0;
+            let sumSq = 0;
+
+            for (let i = 0; i < plotDf.length; i++) {
+                const v = plotDf[i][col];
+                if (!Number.isNaN(v)) {
+                    validValues.push(v);
+                    sum += v;
+                    sumSq += v * v;
+                    if (v > maxV) {
+                        maxV = v;
+                        maxRow = plotDf[i];
+                    }
+                    if (v < minV) {
+                        minV = v;
+                        minRow = plotDf[i];
+                    }
+                }
+            }
+
+            const countV = validValues.length;
+            if (countV === 0) continue;
+
+            const meanV = sum / countV;
+            let stdV = 0.0;
+            if (countV > 1) {
+                let varSum = 0;
+                for (let i = 0; i < countV; i++) {
+                    const diff = validValues[i] - meanV;
+                    varSum += diff * diff;
+                }
+                stdV = Math.sqrt(varSum / (countV - 1)); // ddof=1 sample std
+            }
+            const rmsV = Math.sqrt(sumSq / countV);
+            const rangeV = maxV - minV;
+            const peakToPeakV = rangeV;
+
+            const maxTime = xCol === "Time" && maxRow ? formatTimeForAnalysis(maxRow.Time_dt) : "-";
+            const minTime = xCol === "Time" && minRow ? formatTimeForAnalysis(minRow.Time_dt) : "-";
+
+            const rowLine =
+                col.padEnd(22, " ") +
+                countV.toLocaleString("en-US").padStart(10, " ") +
+                meanV.toFixed(4).padStart(14, " ") +
+                maxV.toFixed(4).padStart(14, " ") +
+                maxTime.padStart(18, " ") +
+                minV.toFixed(4).padStart(14, " ") +
+                minTime.padStart(18, " ") +
+                stdV.toFixed(4).padStart(14, " ") +
+                rmsV.toFixed(4).padStart(14, " ") +
+                rangeV.toFixed(4).padStart(14, " ") +
+                peakToPeakV.toFixed(4).padStart(14, " ");
+
+            lines.push(rowLine);
+        }
+
+        lines.push("");
+        lines.push("[Note]");
+        lines.push("- Count: numeric data count after removing NaN");
+        lines.push("- Std: sample standard deviation, pandas std(ddof=1)");
+        lines.push("- RMS: Root Mean Square = sqrt(mean(x^2))");
+        lines.push("- Range / Peak-Peak: Max - Min");
+
+        analysisText.value = lines.join("\n");
+    }
+
+    // -------------------------------------------------------------------------
+    // 7. Matplotlib-Style Canvas Graph Engine
+    // -------------------------------------------------------------------------
+    function drawEmptyGraph() {
+        state.plotSeries = [];
+        state.hoverPoint = null;
+        state.isTimeAxis = true;
+        state.xDomain = [0, 1];
+        state.yDomain = [0, 1];
+        renderCanvas();
+    }
+
+    function prepareAndDrawPlot(plotDf, xCol, yCols) {
+        const isTime = (xCol === "Time");
+        let xMin = Infinity;
+        let xMax = -Infinity;
+        let yMinData = Infinity;
+        let yMaxData = -Infinity;
+        let hasYearGT1900 = false;
+
+        const seriesList = [];
+
+        for (let idx = 0; idx < yCols.length; idx++) {
+            const col = yCols[idx];
+            const color = COLOR_CYCLE[idx % COLOR_CYCLE.length];
+            const points = [];
+
+            for (let i = 0; i < plotDf.length; i++) {
+                const row = plotDf[i];
+                const xVal = isTime ? row.Time_dt : row[xCol];
+                const yVal = row[col];
+                if (Number.isNaN(xVal) || Number.isNaN(yVal)) continue;
+
+                if (xVal < xMin) xMin = xVal;
+                if (xVal > xMax) xMax = xVal;
+                if (yVal < yMinData) yMinData = yVal;
+                if (yVal > yMaxData) yMaxData = yVal;
+
+                if (isTime && !hasYearGT1900) {
+                    if (new Date(xVal).getFullYear() > 1900) {
+                        hasYearGT1900 = true;
+                    }
+                }
+                points.push({ x: xVal, y: yVal });
+            }
+
+            seriesList.push({ col, color, points });
+        }
+
+        if (!Number.isFinite(xMin) || !Number.isFinite(xMax)) {
+            xMin = 0;
+            xMax = 1;
+        }
+        if (xMin === xMax) {
+            const pad = isTime ? 60000 : 1;
+            xMin -= pad;
+            xMax += pad;
+        } else {
+            // Matplotlib default 5% x margin
+            const span = xMax - xMin;
+            xMin -= span * 0.03;
+            xMax += span * 0.03;
+        }
+
+        if (!Number.isFinite(yMinData) || !Number.isFinite(yMaxData)) {
+            yMinData = 0;
+            yMaxData = 1;
+        }
+        let autoYMin = yMinData;
+        let autoYMax = yMaxData;
+        if (autoYMin === autoYMax) {
+            autoYMin -= 1;
+            autoYMax += 1;
+        } else {
+            const ySpan = autoYMax - autoYMin;
+            autoYMin -= ySpan * 0.05;
+            autoYMax += ySpan * 0.05;
+        }
+
+        // Check user Y-axis bounds (edit_y_min / edit_y_max)
+        const yMinText = editYMin.value.trim();
+        const yMaxText = editYMax.value.trim();
+        let finalYMin = autoYMin;
+        let finalYMax = autoYMax;
+
+        if (yMinText !== "" || yMaxText !== "") {
+            if (yMinText !== "") {
+                finalYMin = Number(yMinText);
+                if (Number.isNaN(finalYMin)) {
+                    throw new Error(`y축 최소값을 숫자로 변환할 수 없습니다: ${yMinText}`);
+                }
+            }
+            if (yMaxText !== "") {
+                finalYMax = Number(yMaxText);
+                if (Number.isNaN(finalYMax)) {
+                    throw new Error(`y축 최대값을 숫자로 변환할 수 없습니다: ${yMaxText}`);
+                }
+            }
+            if (finalYMin >= finalYMax) {
+                throw new Error("y축 최소값은 y축 최대값보다 작아야 합니다.");
+            }
+        }
+
+        state.plotSeries = seriesList;
+        state.isTimeAxis = isTime;
+        state.hasYearGT1900 = hasYearGT1900;
+        state.xDomain = [xMin, xMax];
+        state.yDomain = [finalYMin, finalYMax];
+        state.initialXDomain = [xMin, xMax];
+        state.initialYDomain = [finalYMin, finalYMax];
+        state.hoverPoint = null;
+
+        renderCanvas();
+    }
+
+    function getPlotGeometry(width, height) {
+        const left = 72;
+        const right = 24;
+        const top = 46;
+        const bottom = 52;
+        return {
+            left,
+            top,
+            right: width - right,
+            bottom: height - bottom,
+            plotWidth: Math.max(10, width - left - right),
+            plotHeight: Math.max(10, height - top - bottom)
+        };
+    }
+
+    function formatXTick(val) {
+        if (state.plotSeries.length === 0) {
+            return val.toFixed(1);
+        }
+        if (state.isTimeAxis) {
+            const d = new Date(val);
+            if (isNaN(d.getTime())) return "";
+            const hh = pad2(d.getHours());
+            const mm = pad2(d.getMinutes());
+            const ss = pad2(d.getSeconds());
+            const spanMs = Math.abs(state.xDomain[1] - state.xDomain[0]);
+            if (state.hasYearGT1900) {
+                const mo = pad2(d.getMonth() + 1);
+                const da = pad2(d.getDate());
+                if (spanMs < 180000) {
+                    return `${mo}-${da} ${hh}:${mm}:${ss}`;
+                }
+                return `${mo}-${da} ${hh}:${mm}`;
+            } else {
+                if (spanMs < 180000) {
+                    return `${hh}:${mm}:${ss}`;
+                }
+                return `${hh}:${mm}`;
+            }
+        }
+        return Number(val.toPrecision(6)).toString();
+    }
+
+    function formatHoverX(val) {
+        if (state.isTimeAxis) {
+            const d = new Date(val);
+            const mo = pad2(d.getMonth() + 1);
+            const da = pad2(d.getDate());
+            const hh = pad2(d.getHours());
+            const mm = pad2(d.getMinutes());
+            const ss = pad2(d.getSeconds());
+            return `${mo}-${da} ${hh}:${mm}:${ss}`;
+        }
+        return val.toFixed(4);
+    }
+
+    function renderCanvas(targetCtx = null, customWidth = null, customHeight = null, dprOverride = null) {
+        const rect = canvasContainer.getBoundingClientRect();
+        const width = customWidth || Math.max(300, Math.floor(rect.width));
+        const height = customHeight || Math.max(180, Math.floor(rect.height));
+        const dpr = dprOverride || window.devicePixelRatio || 1;
+
+        let ctx = targetCtx;
+        if (!ctx) {
+            if (plotCanvas.width !== Math.floor(width * dpr) || plotCanvas.height !== Math.floor(height * dpr)) {
+                plotCanvas.width = Math.floor(width * dpr);
+                plotCanvas.height = Math.floor(height * dpr);
+            }
+            ctx = plotCanvas.getContext("2d");
+        }
+
+        ctx.save();
+        ctx.scale(dpr, dpr);
+
+        // Background
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillRect(0, 0, width, height);
+
+        const geom = getPlotGeometry(width, height);
+        const [xMin, xMax] = state.xDomain;
+        const [yMin, yMax] = state.yDomain;
+
+        // Plot Area Background
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillRect(geom.left, geom.top, geom.plotWidth, geom.plotHeight);
+
+        // Grid & Ticks (Matplotlib style dashed grid alpha=0.35)
+        const xTicks = 6;
+        const yTicks = 6;
+
+        ctx.strokeStyle = "rgba(128, 128, 128, 0.35)";
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 4]);
+
+        // Vertical grid lines & X tick labels
+        ctx.fillStyle = "#1F2933";
+        ctx.font = "11px 'Malgun Gothic', sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "top";
+
+        for (let i = 0; i <= xTicks; i++) {
+            const ratio = i / xTicks;
+            const xPx = geom.left + ratio * geom.plotWidth;
+            const xVal = xMin + ratio * (xMax - xMin);
+
+            ctx.beginPath();
+            ctx.moveTo(xPx, geom.top);
+            ctx.lineTo(xPx, geom.bottom);
+            ctx.stroke();
+
+            // Tick mark
+            ctx.save();
+            ctx.setLineDash([]);
+            ctx.strokeStyle = "#334155";
+            ctx.beginPath();
+            ctx.moveTo(xPx, geom.bottom);
+            ctx.lineTo(xPx, geom.bottom + 5);
+            ctx.stroke();
+            ctx.restore();
+
+            ctx.fillText(formatXTick(xVal), xPx, geom.bottom + 8);
+        }
+
+        // Horizontal grid lines & Y tick labels
+        ctx.textAlign = "right";
+        ctx.textBaseline = "middle";
+        for (let i = 0; i <= yTicks; i++) {
+            const ratio = i / yTicks;
+            const yPx = geom.bottom - ratio * geom.plotHeight;
+            const yVal = yMin + ratio * (yMax - yMin);
+
+            ctx.beginPath();
+            ctx.moveTo(geom.left, yPx);
+            ctx.lineTo(geom.right, yPx);
+            ctx.stroke();
+
+            // Tick mark
+            ctx.save();
+            ctx.setLineDash([]);
+            ctx.strokeStyle = "#334155";
+            ctx.beginPath();
+            ctx.moveTo(geom.left - 5, yPx);
+            ctx.lineTo(geom.left, yPx);
+            ctx.stroke();
+            ctx.restore();
+
+            const yLabel = Number(yVal.toFixed(2)).toString();
+            ctx.fillText(yLabel, geom.left - 8, yPx);
+        }
+
+        ctx.setLineDash([]);
+
+        // Plot Data Series (Clipped to Plot Area)
+        if (state.plotSeries.length > 0) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(geom.left, geom.top, geom.plotWidth, geom.plotHeight);
+            ctx.clip();
+
+            for (const series of state.plotSeries) {
+                const pts = series.points;
+                if (pts.length === 0) continue;
+
+                ctx.strokeStyle = series.color;
+                ctx.lineWidth = 1.75;
+                ctx.lineJoin = "round";
+                ctx.lineCap = "round";
+                ctx.beginPath();
+
+                let started = false;
+                for (let i = 0; i < pts.length; i++) {
+                    const px = geom.left + ((pts[i].x - xMin) / (xMax - xMin)) * geom.plotWidth;
+                    const py = geom.bottom - ((pts[i].y - yMin) / (yMax - yMin)) * geom.plotHeight;
+                    if (!started) {
+                        ctx.moveTo(px, py);
+                        started = true;
+                    } else {
+                        ctx.lineTo(px, py);
+                    }
+                }
+                ctx.stroke();
+            }
+            ctx.restore();
+        }
+
+        // Plot Border Frame
+        ctx.strokeStyle = "#334155";
+        ctx.lineWidth = 1.1;
+        ctx.strokeRect(geom.left, geom.top, geom.plotWidth, geom.plotHeight);
+
+        // Title
+        ctx.fillStyle = "#102A43";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        if (state.plotSeries.length === 0) {
+            ctx.font = "bold 14.5px 'Malgun Gothic', sans-serif";
+            ctx.fillText("엑셀/CSV 데이터 Graph Analyzer V1.0", geom.left + geom.plotWidth / 2, 23);
+        } else {
+            ctx.font = "bold 13.5px 'Malgun Gothic', sans-serif";
+            const yCols = state.currentYCols;
+            const titleCols = yCols.slice(0, 6).join(", ") + (yCols.length > 6 ? " ..." : "");
+            ctx.fillText(`${state.fileName} | ${titleCols}`, geom.left + geom.plotWidth / 2, 23);
+        }
+
+        // X Axis Label
+        ctx.font = "12px 'Malgun Gothic', sans-serif";
+        ctx.fillStyle = "#1F2933";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "bottom";
+        const xAxisTitle = state.plotSeries.length === 0 ? "Time" : (state.currentXCol === "Time" ? "Time" : state.currentXCol);
+        ctx.fillText(xAxisTitle, geom.left + geom.plotWidth / 2, height - 6);
+
+        // Y Axis Label (Rotated)
+        ctx.save();
+        ctx.translate(18, geom.top + geom.plotHeight / 2);
+        ctx.rotate(-Math.PI / 2);
+        ctx.textAlign = "center";
+        ctx.textBaseline = "top";
+        ctx.fillText("Value", 0, 0);
+        ctx.restore();
+
+        // Legend (Matplotlib frameon=True style)
+        if (state.plotSeries.length > 0) {
+            drawLegend(ctx, geom, state.plotSeries);
+        }
+
+        // Zoom Selection Box
+        if (state.interactionMode === "zoom" && state.dragStart && state.dragCurrent) {
+            ctx.save();
+            const bx = Math.min(state.dragStart.x, state.dragCurrent.x);
+            const by = Math.min(state.dragStart.y, state.dragCurrent.y);
+            const bw = Math.abs(state.dragCurrent.x - state.dragStart.x);
+            const bh = Math.abs(state.dragCurrent.y - state.dragStart.y);
+            ctx.fillStyle = "rgba(47, 128, 237, 0.14)";
+            ctx.strokeStyle = "#2F80ED";
+            ctx.lineWidth = 1.2;
+            ctx.setLineDash([4, 3]);
+            ctx.fillRect(bx, by, bw, bh);
+            ctx.strokeRect(bx, by, bw, bh);
+            ctx.restore();
+        }
+
+        // Hover Tooltip Annotation (Exact match with #FFF8DC Matplotlib annotation)
+        if (!targetCtx && state.hoverPoint) {
+            drawHoverAnnotation(ctx, geom, state.hoverPoint);
+        }
+
+        ctx.restore();
+    }
+
+    function drawLegend(ctx, geom, seriesList) {
+        ctx.save();
+        ctx.font = "11px 'Malgun Gothic', sans-serif";
+        const maxLegendItems = Math.min(seriesList.length, 12);
+        let maxTextW = 0;
+        for (let i = 0; i < maxLegendItems; i++) {
+            const w = ctx.measureText(seriesList[i].col).width;
+            if (w > maxTextW) maxTextW = w;
+        }
+        const lineLen = 22;
+        const padX = 10;
+        const padY = 8;
+        const rowH = 18;
+        const extraRows = seriesList.length > maxLegendItems ? 1 : 0;
+        const boxW = lineLen + 8 + maxTextW + padX * 2;
+        const boxH = (maxLegendItems + extraRows) * rowH + padY * 2 - 4;
+
+        const boxX = geom.right - boxW - 10;
+        const boxY = geom.top + 10;
+
+        ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+        ctx.strokeStyle = "#CBD5E1";
+        ctx.lineWidth = 1;
+        roundRect(ctx, boxX, boxY, boxW, boxH, 4, true, true);
+
+        for (let i = 0; i < maxLegendItems; i++) {
+            const item = seriesList[i];
+            const yCenter = boxY + padY + i * rowH + 6;
+
+            ctx.strokeStyle = item.color;
+            ctx.lineWidth = 2.2;
+            ctx.beginPath();
+            ctx.moveTo(boxX + padX, yCenter);
+            ctx.lineTo(boxX + padX + lineLen, yCenter);
+            ctx.stroke();
+
+            ctx.fillStyle = "#1F2933";
+            ctx.textAlign = "left";
+            ctx.textBaseline = "middle";
+            ctx.fillText(item.col, boxX + padX + lineLen + 8, yCenter);
+        }
+
+        if (extraRows > 0) {
+            const yCenter = boxY + padY + maxLegendItems * rowH + 6;
+            ctx.fillStyle = "#64748B";
+            ctx.textAlign = "left";
+            ctx.textBaseline = "middle";
+            ctx.fillText(`... +${seriesList.length - maxLegendItems} more`, boxX + padX, yCenter);
+        }
+        ctx.restore();
+    }
+
+    function drawHoverAnnotation(ctx, geom, hp) {
+        ctx.save();
+        // Highlight marker on line
+        ctx.fillStyle = hp.color;
+        ctx.strokeStyle = "#FFFFFF";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(hp.screenX, hp.screenY, 4.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        const lines = [
+            hp.col,
+            `x=${formatHoverX(hp.xVal)}`,
+            `y=${hp.yVal.toFixed(4)}`
+        ];
+
+        ctx.font = "11.5px Consolas, 'Malgun Gothic', monospace";
+        let maxW = 0;
+        for (const l of lines) {
+            const w = ctx.measureText(l).width;
+            if (w > maxW) maxW = w;
+        }
+        const padX = 9;
+        const padY = 7;
+        const lineH = 16;
+        const boxW = maxW + padX * 2;
+        const boxH = lines.length * lineH + padY * 2 - 2;
+
+        let boxX = hp.screenX + 14;
+        let boxY = hp.screenY - boxH - 12;
+        if (boxX + boxW > geom.right - 4) {
+            boxX = hp.screenX - boxW - 14;
+        }
+        if (boxY < geom.top + 4) {
+            boxY = hp.screenY + 14;
+        }
+
+        // Arrow line to point
+        ctx.strokeStyle = "#777777";
+        ctx.lineWidth = 1.1;
+        ctx.beginPath();
+        ctx.moveTo(boxX + boxW / 2, boxY + boxH / 2);
+        ctx.lineTo(hp.screenX, hp.screenY);
+        ctx.stroke();
+
+        // Rounded box (#FFF8DC, border #777777)
+        ctx.fillStyle = "rgba(255, 248, 220, 0.96)";
+        ctx.strokeStyle = "#777777";
+        ctx.lineWidth = 1;
+        roundRect(ctx, boxX, boxY, boxW, boxH, 6, true, true);
+
+        ctx.fillStyle = "#102A43";
+        ctx.textAlign = "left";
+        ctx.textBaseline = "top";
+        for (let i = 0; i < lines.length; i++) {
+            ctx.fillText(lines[i], boxX + padX, boxY + padY + i * lineH);
+        }
+        ctx.restore();
+    }
+
+    function roundRect(ctx, x, y, w, h, r, fill, stroke) {
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.lineTo(x + w - r, y);
+        ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+        ctx.lineTo(x + w, y + h - r);
+        ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+        ctx.lineTo(x + r, y + h);
+        ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+        ctx.lineTo(x, y + r);
+        ctx.quadraticCurveTo(x, y, x + r, y);
+        ctx.closePath();
+        if (fill) ctx.fill();
+        if (stroke) ctx.stroke();
+    }
+
+    // -------------------------------------------------------------------------
+    // 8. Mouse Hover, Zoom & Pan Interactions
+    // -------------------------------------------------------------------------
+    toolHome.addEventListener("click", () => {
+        if (state.plotSeries.length === 0) return;
+        state.xDomain = [...state.initialXDomain];
+        state.yDomain = [...state.initialYDomain];
+        renderCanvas();
+    });
+
+    toolZoom.addEventListener("click", () => {
+        state.interactionMode = state.interactionMode === "zoom" ? null : "zoom";
+        toolZoom.classList.toggle("active", state.interactionMode === "zoom");
+        toolPan.classList.remove("active");
+        plotCanvas.style.cursor = state.interactionMode === "zoom" ? "crosshair" : "default";
+    });
+
+    toolPan.addEventListener("click", () => {
+        state.interactionMode = state.interactionMode === "pan" ? null : "pan";
+        toolPan.classList.toggle("active", state.interactionMode === "pan");
+        toolZoom.classList.remove("active");
+        plotCanvas.style.cursor = state.interactionMode === "pan" ? "grab" : "default";
+    });
+
+    plotCanvas.addEventListener("mousedown", (e) => {
+        if (state.plotSeries.length === 0 || !state.interactionMode) return;
+        const rect = plotCanvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+        state.dragStart = {
+            x: mx,
+            y: my,
+            xDomain: [...state.xDomain],
+            yDomain: [...state.yDomain]
+        };
+        state.dragCurrent = { x: mx, y: my };
+    });
+
+    plotCanvas.addEventListener("mousemove", (e) => {
+        const rect = plotCanvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+        const geom = getPlotGeometry(rect.width, rect.height);
+
+        // Handle Zoom / Pan Dragging
+        if (state.dragStart && state.interactionMode === "pan") {
+            const dx = mx - state.dragStart.x;
+            const dy = my - state.dragStart.y;
+            const xSpan = state.dragStart.xDomain[1] - state.dragStart.xDomain[0];
+            const ySpan = state.dragStart.yDomain[1] - state.dragStart.yDomain[0];
+            const xShift = -(dx / geom.plotWidth) * xSpan;
+            const yShift = (dy / geom.plotHeight) * ySpan;
+            state.xDomain = [state.dragStart.xDomain[0] + xShift, state.dragStart.xDomain[1] + xShift];
+            state.yDomain = [state.dragStart.yDomain[0] + yShift, state.dragStart.yDomain[1] + yShift];
+            renderCanvas();
+            return;
+        }
+
+        if (state.dragStart && state.interactionMode === "zoom") {
+            state.dragCurrent = { x: mx, y: my };
+            renderCanvas();
+            return;
+        }
+
+        // Hover Tooltip Calculation (Mirrors _on_mouse_move in PyQt5)
+        if (
+            state.plotSeries.length === 0 ||
+            mx < geom.left || mx > geom.right ||
+            my < geom.top || my > geom.bottom
+        ) {
+            toolbarCoords.textContent = "";
+            if (state.hoverPoint !== null) {
+                state.hoverPoint = null;
+                renderCanvas();
+            }
+            return;
+        }
+
+        const [xMin, xMax] = state.xDomain;
+        const [yMin, yMax] = state.yDomain;
+        const mouseXVal = xMin + ((mx - geom.left) / geom.plotWidth) * (xMax - xMin);
+        const mouseYVal = yMin + ((geom.bottom - my) / geom.plotHeight) * (yMax - yMin);
+
+        toolbarCoords.textContent = `x=${formatHoverX(mouseXVal)}, y=${mouseYVal.toFixed(4)}`;
+
+        let nearest = null;
+        for (const series of state.plotSeries) {
+            const pts = series.points;
+            if (pts.length === 0) continue;
+
+            // Binary search for closest X
+            let lo = 0;
+            let hi = pts.length - 1;
+            while (lo < hi) {
+                const mid = (lo + hi) >> 1;
+                if (pts[mid].x < mouseXVal) lo = mid + 1;
+                else hi = mid;
+            }
+            let bestIdx = lo;
+            if (lo > 0 && Math.abs(pts[lo - 1].x - mouseXVal) < Math.abs(pts[lo].x - mouseXVal)) {
+                bestIdx = lo - 1;
+            }
+
+            const pt = pts[bestIdx];
+            const px = geom.left + ((pt.x - xMin) / (xMax - xMin)) * geom.plotWidth;
+            const py = geom.bottom - ((pt.y - yMin) / (yMax - yMin)) * geom.plotHeight;
+            if (px < geom.left || px > geom.right || py < geom.top || py > geom.bottom) continue;
+
+            const distPx = Math.hypot(px - mx, (py - my) * 0.65);
+            if (!nearest || distPx < nearest.distPx) {
+                nearest = {
+                    distPx,
+                    col: series.col,
+                    color: series.color,
+                    xVal: pt.x,
+                    yVal: pt.y,
+                    screenX: px,
+                    screenY: py
+                };
+            }
+        }
+
+        state.hoverPoint = nearest;
+        renderCanvas();
+    });
+
+    window.addEventListener("mouseup", () => {
+        if (!state.dragStart) return;
+        if (state.interactionMode === "zoom" && state.dragCurrent) {
+            const rect = plotCanvas.getBoundingClientRect();
+            const geom = getPlotGeometry(rect.width, rect.height);
+            const x1 = Math.max(geom.left, Math.min(state.dragStart.x, state.dragCurrent.x));
+            const x2 = Math.min(geom.right, Math.max(state.dragStart.x, state.dragCurrent.x));
+            const y1 = Math.max(geom.top, Math.min(state.dragStart.y, state.dragCurrent.y));
+            const y2 = Math.min(geom.bottom, Math.max(state.dragStart.y, state.dragCurrent.y));
+
+            if (x2 - x1 > 8 && y2 - y1 > 8) {
+                const [curXMin, curXMax] = state.xDomain;
+                const [curYMin, curYMax] = state.yDomain;
+                const newXMin = curXMin + ((x1 - geom.left) / geom.plotWidth) * (curXMax - curXMin);
+                const newXMax = curXMin + ((x2 - geom.left) / geom.plotWidth) * (curXMax - curXMin);
+                const newYMax = curYMin + ((geom.bottom - y1) / geom.plotHeight) * (curYMax - curYMin);
+                const newYMin = curYMin + ((geom.bottom - y2) / geom.plotHeight) * (curYMax - curYMin);
+                state.xDomain = [newXMin, newXMax];
+                state.yDomain = [newYMin, newYMax];
+            }
+        }
+        state.dragStart = null;
+        state.dragCurrent = null;
+        renderCanvas();
+    });
+
+    // Resize Observer for responsive canvas redrawing
+    const resizeObserver = new ResizeObserver(() => {
+        renderCanvas();
+    });
+    resizeObserver.observe(canvasContainer);
+
+    // -------------------------------------------------------------------------
+    // 9. Save Functions (CSV & High-Resolution 200 DPI JPG)
+    // -------------------------------------------------------------------------
+    btnSaveCsv.addEventListener("click", () => {
+        if (!state.currentPlotDf || state.currentPlotDf.length === 0) {
+            showMessageBox("저장할 데이터 없음", "먼저 그래프를 출력해 주세요.");
+            return;
+        }
+        try {
+            const baseName = (state.fileName || "selected_plot_data").replace(/\.[^/.]+$/, "");
+            const defaultName = `${baseName}_selected_plot_data.csv`;
+
+            // Columns matching _make_filtered_plot_dataframe in Python
+            const exportCols = ["Time", "Time_dt"];
+            if (!exportCols.includes(state.currentXCol)) {
+                exportCols.push(state.currentXCol);
+            }
+            for (const y of state.currentYCols) {
+                if (!exportCols.includes(y)) exportCols.push(y);
+            }
+
+            const csvLines = [exportCols.join(",")];
+            for (let i = 0; i < state.currentPlotDf.length; i++) {
+                const row = state.currentPlotDf[i];
+                const cells = exportCols.map(c => {
+                    if (c === "Time_dt") {
+                        return formatTimeForSavedCsv(row.Time_dt);
+                    }
+                    const val = row[c];
+                    if (val === undefined || val === null || Number.isNaN(val)) return "";
+                    const str = String(val);
+                    return str.includes(",") || str.includes('"') ? `"${str.replace(/"/g, '""')}"` : str;
+                });
+                csvLines.push(cells.join(","));
+            }
+
+            // UTF-8 with BOM (utf-8-sig)
+            const bom = "\uFEFF";
+            const blob = new Blob([bom + csvLines.join("\r\n")], { type: "text/csv;charset=utf-8;" });
+            triggerDownload(blob, defaultName);
+        } catch (err) {
+            showMessageBox("CSV 저장 오류", `CSV 파일 저장 중 오류가 발생했습니다.\n\n${err.message || err}`);
+        }
+    });
+
+    btnSaveJpg.addEventListener("click", () => {
+        if (!state.currentPlotDf || state.currentPlotDf.length === 0) {
+            showMessageBox("저장할 그래프 없음", "먼저 그래프를 출력해 주세요.");
+            return;
+        }
+        try {
+            const baseName = (state.fileName || "selected_plot_graph").replace(/\.[^/.]+$/, "");
+            const defaultName = `${baseName}_selected_plot_graph.jpg`;
+
+            // Render onto an offscreen canvas at 200 DPI equivalent (figsize 12x6 -> 2400x1200)
+            const offCanvas = document.createElement("canvas");
+            const expW = 1200;
+            const expH = 600;
+            const scale = 2; // 2400 x 1200 px (200 DPI)
+            offCanvas.width = expW * scale;
+            offCanvas.height = expH * scale;
+            const offCtx = offCanvas.getContext("2d");
+
+            renderCanvas(offCtx, expW, expH, scale);
+
+            offCanvas.toBlob((blob) => {
+                if (!blob) return;
+                triggerDownload(blob, defaultName);
+            }, "image/jpeg", 0.95);
+        } catch (err) {
+            showMessageBox("JPG 저장 오류", `그래프 이미지 저장 중 오류가 발생했습니다.\n\n${err.message || err}`);
+        }
+    });
+
+    function triggerDownload(blob, filename) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    // -------------------------------------------------------------------------
+    // 10. Resizable Splitters (Horizontal & Vertical)
+    // -------------------------------------------------------------------------
+    const splitterV = document.getElementById("splitterV");
+    const leftPanel = document.getElementById("leftPanel");
+    let isDraggingV = false;
+
+    splitterV.addEventListener("mousedown", () => {
+        isDraggingV = true;
+        document.body.style.cursor = "col-resize";
+    });
+
+    const splitterH = document.getElementById("splitterH");
+    const rightPanel = document.getElementById("rightPanel");
+    const graphPanel = document.getElementById("graphPanel");
+    const analysisPanel = document.getElementById("analysisPanel");
+    let isDraggingH = false;
+
+    splitterH.addEventListener("mousedown", () => {
+        isDraggingH = true;
+        document.body.style.cursor = "row-resize";
+    });
+
+    window.addEventListener("mousemove", (e) => {
+        if (isDraggingV) {
+            const newW = Math.min(600, Math.max(260, e.clientX - 8));
+            leftPanel.style.width = `${newW}px`;
+            renderCanvas();
+        }
+        if (isDraggingH) {
+            const rect = rightPanel.getBoundingClientRect();
+            const relY = e.clientY - rect.top;
+            const totalH = rect.height;
+            const ratio = Math.min(0.82, Math.max(0.32, relY / totalH));
+            graphPanel.style.flex = `${Math.round(ratio * 100)}`;
+            analysisPanel.style.flex = `${Math.round((1 - ratio) * 100)}`;
+            renderCanvas();
+        }
+    });
+
+    window.addEventListener("mouseup", () => {
+        if (isDraggingV || isDraggingH) {
+            isDraggingV = false;
+            isDraggingH = false;
+            document.body.style.cursor = "default";
+        }
+    });
+
+    // Initial render
+    drawEmptyGraph();
+})();
+</script>
+</body>
+</html>
